@@ -9,12 +9,12 @@ import json
 import base64
 import sys
 import os
+import uuid
 
 # Add parent directory to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from crypto.ecc import generate_ecc_keypair, point_to_bytes, bytes_to_point, private_key_to_bytes, bytes_to_private_key
-from crypto.aes import generate_aes_key
 
 # ─────────────────────────────────────────────
 # SERVER CONFIGURATION
@@ -28,8 +28,14 @@ PORT = 55555
 # SERVER STATE
 # ─────────────────────────────────────────────
 
-clients = {}        # { conn: { 'username': str, 'ecc_pub': tuple, 'aes_key': bytes } }
+# { conn: { 'username': str, 'ecc_pub': tuple, 'dh_pub': str } }
+clients = {}
 clients_lock = threading.Lock()
+
+# NOTE: Server no longer generates or sends any AES key.
+# Clients now use DH to compute a shared secret independently.
+# That shared secret becomes the AES key on both sides.
+# Server never knows the AES key at all.
 
 
 # ─────────────────────────────────────────────
@@ -96,42 +102,86 @@ def broadcast_message(sender_conn, data: dict):
 def handle_client(conn, addr):
     print(f"[SERVER] New connection from {addr}")
 
-    # ── Step 1: Receive HELLO (username + ECC public key) ──
+    # ── Step 1: Receive HELLO (username + ECC public key + DH public key) ──
     hello = recv_json(conn)
     if not hello or hello.get('type') != 'hello':
         print(f"[SERVER] Bad handshake from {addr}")
         conn.close()
         return
 
-    username = hello['username']
+    username      = hello['username']
     ecc_pub_bytes = base64.b64decode(hello['ecc_pub'])
-    ecc_pub = bytes_to_point(ecc_pub_bytes)
+    ecc_pub       = bytes_to_point(ecc_pub_bytes)
+    dh_pub_b64    = hello['dh_pub']
 
-    # ── Step 2: Generate & send a shared AES session key ──
-    aes_key = generate_aes_key()
+    # ── Check if server is full (max 2 clients) ──
+    with clients_lock:
+        existing_names = [info['username'] for info in clients.values()]
+    if len(existing_names) >= 2:
+        send_json(conn, {
+            'type': 'error',
+            'message': 'Server is full. Only 2 clients are allowed at a time.'
+        })
+        conn.close()
+        print(f"[SERVER] Rejected {username} — server full ({len(existing_names)}/2 clients)")
+        return
 
-    # Store client info
+    # ── Check if username already taken ──
+    if username in existing_names:
+        send_json(conn, {
+            'type': 'error',
+            'message': f'Username "{username}" is already taken. Please choose another.'
+        })
+        conn.close()
+        print(f"[SERVER] Rejected duplicate username: {username}")
+        return
+
+    # Store client info — no AES key stored here anymore
     with clients_lock:
         clients[conn] = {
             'username': username,
-            'ecc_pub': ecc_pub,
-            'aes_key': aes_key,
-            'addr': addr
+            'ecc_pub':  ecc_pub,
+            'dh_pub':   dh_pub_b64,  # store DH public key
+            'addr':     addr
         }
 
-    # Send welcome + AES key to this client
+    session_id = str(uuid.uuid4())[:8] + "_" + username
+
+    # Collect existing peers ECC + DH public keys to send to new client
+    with clients_lock:
+        peers = [
+            {
+                'username': info['username'],
+                'ecc_pub':  base64.b64encode(point_to_bytes(info['ecc_pub'])).decode(),
+                'dh_pub':   info['dh_pub'],  # include peer DH public key
+            }
+            for c, info in clients.items() if c != conn
+        ]
+
+    # ── Step 2: Send WELCOME — no AES key sent anymore ──
+    # Client will compute its own AES key using DH shared secret
     send_json(conn, {
-        'type': 'welcome',
-        'message': f'Welcome {username}! You are connected.',
-        'aes_key': base64.b64encode(aes_key).decode()
+        'type':       'welcome',
+        'message':    f'Welcome {username}! You are connected.',
+        'session_id': session_id,
+        'peers':      peers,
+        # no 'aes_key' field — DH handles key agreement now
     })
 
-    print(f"[SERVER] {username} joined from {addr}")
+    # Notify existing clients of new user ECC + DH public keys
+    broadcast_message(conn, {
+        'type':     'peer_key',
+        'username': username,
+        'ecc_pub':  base64.b64encode(point_to_bytes(ecc_pub)).decode(),
+        'dh_pub':   dh_pub_b64,  # forward new client DH key to existing clients
+    })
 
-    # Notify all clients of new user
+    print(f"[SERVER] {username} joined — DH public key forwarded to peers")
+
+    # Notify all clients of updated user list + join message
     broadcast_user_list()
     broadcast_message(conn, {
-        'type': 'system',
+        'type':    'system',
         'message': f'{username} has joined the chat!'
     })
 
@@ -147,12 +197,10 @@ def handle_client(conn, addr):
         if msg_type == 'message':
             sender = get_username(conn)
             print(f"[SERVER] Message from {sender}")
-
-            # Forward full payload (with timing info) to all other clients
             data['sender'] = sender
             broadcast_message(conn, data)
 
-        # ── Key exchange request (ECC public key share) ──
+        # ── Key exchange / ECC public key share ──
         elif msg_type == 'key_share':
             sender = get_username(conn)
             data['sender'] = sender
@@ -171,21 +219,9 @@ def handle_client(conn, addr):
     print(f"[SERVER] {username} disconnected")
     broadcast_user_list()
     broadcast_message(None, {
-        'type': 'system',
+        'type':    'system',
         'message': f'{username} has left the chat.'
     })
-
-
-# ─────────────────────────────────────────────
-# BROADCAST (allow None sender for system msgs)
-# ─────────────────────────────────────────────
-
-def broadcast_message(sender_conn, data: dict):
-    """Send a message to all clients except sender"""
-    with clients_lock:
-        targets = [c for c in clients if c != sender_conn]
-    for conn in targets:
-        send_json(conn, data)
 
 
 # ─────────────────────────────────────────────
@@ -202,6 +238,7 @@ def start_server():
     print(f"  Encrypted Chat Server started")
     print(f"  Listening on {HOST}:{PORT}")
     print(f"  Waiting for clients...")
+    print(f"  AES keys computed by clients via DH")
     print("=" * 50)
 
     try:

@@ -6,6 +6,7 @@
 import sys
 import os
 import threading
+import queue
 
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
@@ -49,7 +50,7 @@ class LoginDialog(QDialog):
         super().__init__()
         self.username = ""
         self.setWindowTitle("Encrypted Chat — Connect")
-        self.setFixedSize(420, 340)
+        self.setFixedSize(600, 460)
         self.setStyleSheet(f"""
             QDialog {{
                 background-color: {BG_DARK};
@@ -68,7 +69,7 @@ class LoginDialog(QDialog):
         title.setAlignment(Qt.AlignCenter)
         title.setStyleSheet(f"""
             color: {ACCENT};
-            font-size: 22px;
+            font-size: 34px;
             font-weight: 800;
             letter-spacing: 4px;
             font-family: 'Courier New', monospace;
@@ -77,7 +78,7 @@ class LoginDialog(QDialog):
 
         subtitle = QLabel("AES-256  ·  ECC secp256k1  ·  End-to-End")
         subtitle.setAlignment(Qt.AlignCenter)
-        subtitle.setStyleSheet(f"color: {TEXT_DIM}; font-size: 11px; letter-spacing: 2px;")
+        subtitle.setStyleSheet(f"color: {TEXT_DIM}; font-size: 15px; letter-spacing: 2px;")
         layout.addWidget(subtitle)
 
         layout.addSpacing(10)
@@ -95,8 +96,8 @@ class LoginDialog(QDialog):
                 border: 1px solid {BORDER};
                 border-radius: 6px;
                 color: {TEXT_MAIN};
-                padding: 10px 14px;
-                font-size: 14px;
+                padding: 14px 18px;
+                font-size: 18px;
                 font-family: 'Courier New', monospace;
             }}
             QLineEdit:focus {{
@@ -122,8 +123,8 @@ class LoginDialog(QDialog):
                 color: white;
                 border: none;
                 border-radius: 6px;
-                padding: 12px;
-                font-size: 13px;
+                padding: 16px;
+                font-size: 17px;
                 font-weight: 700;
                 letter-spacing: 2px;
             }}
@@ -136,11 +137,12 @@ class LoginDialog(QDialog):
     def _connect(self):
         name = self.username_input.text().strip()
         if not name:
-            self.status_lbl.setText("Please enter a username.")
+            self.status_lbl.setText("Username already exist please enter another username.")
             return
         if len(name) > 20:
             self.status_lbl.setText("Name too long (max 20 chars).")
             return
+
         self.username = name
         self.accept()
 
@@ -154,15 +156,15 @@ class TimingBar(QWidget):
     def __init__(self, label: str, color: str):
         super().__init__()
         self.color = color
-        self.setFixedHeight(44)
+        self.setFixedHeight(54)
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(8)
 
         self.label = QLabel(label)
-        self.label.setFixedWidth(70)
-        self.label.setStyleSheet(f"color: {TEXT_DIM}; font-size: 10px; letter-spacing: 1px;")
+        self.label.setFixedWidth(100)
+        self.label.setStyleSheet(f"color: {TEXT_DIM}; font-size: 16px; font-weight: 700; letter-spacing: 1px;")
         layout.addWidget(self.label)
 
         bar_container = QWidget()
@@ -181,7 +183,7 @@ class TimingBar(QWidget):
         right.addWidget(bar_container)
 
         self.time_lbl = QLabel("— ms")
-        self.time_lbl.setStyleSheet(f"color: {color}; font-size: 11px; font-family: 'Courier New'; font-weight: 700;")
+        self.time_lbl.setStyleSheet(f"color: {color}; font-size: 15px; font-family: 'Courier New'; font-weight: 700;")
         right.addWidget(self.time_lbl)
 
         layout.addLayout(right)
@@ -208,15 +210,15 @@ class TimingPanel(QFrame):
                 border-radius: 10px;
             }}
         """)
-        self.setFixedWidth(260)
+        self.setFixedWidth(360)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(12)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(14)
 
         # Header
         hdr = QLabel("⚡ CRYPTO TIMING")
-        hdr.setStyleSheet(f"color: {ACCENT}; font-size: 11px; font-weight: 700; letter-spacing: 2px;")
+        hdr.setStyleSheet(f"color: {ACCENT}; font-size: 15px; font-weight: 700; letter-spacing: 2px;")
         layout.addWidget(hdr)
 
         sep = QFrame()
@@ -238,20 +240,20 @@ class TimingPanel(QFrame):
         # Winner label
         self.winner_lbl = QLabel("Send a message to\nsee comparison")
         self.winner_lbl.setAlignment(Qt.AlignCenter)
-        self.winner_lbl.setStyleSheet(f"color: {TEXT_DIM}; font-size: 11px;")
+        self.winner_lbl.setStyleSheet(f"color: {TEXT_DIM}; font-size: 16px;")
         layout.addWidget(self.winner_lbl)
 
         # Stats
         self.msg_count_lbl = QLabel("Messages: 0")
-        self.msg_count_lbl.setStyleSheet(f"color: {TEXT_DIM}; font-size: 10px;")
+        self.msg_count_lbl.setStyleSheet(f"color: {TEXT_DIM}; font-size: 15px;")
         layout.addWidget(self.msg_count_lbl)
 
         self.avg_aes_lbl = QLabel("Avg AES: —")
-        self.avg_aes_lbl.setStyleSheet(f"color: {GREEN}; font-size: 10px; font-family: 'Courier New';")
+        self.avg_aes_lbl.setStyleSheet(f"color: {GREEN}; font-size: 15px; font-family: 'Courier New';")
         layout.addWidget(self.avg_aes_lbl)
 
         self.avg_ecc_lbl = QLabel("Avg ECC: —")
-        self.avg_ecc_lbl.setStyleSheet(f"color: {ORANGE}; font-size: 10px; font-family: 'Courier New';")
+        self.avg_ecc_lbl.setStyleSheet(f"color: {ORANGE}; font-size: 15px; font-family: 'Courier New';")
         layout.addWidget(self.avg_ecc_lbl)
 
         layout.addStretch()
@@ -277,13 +279,13 @@ class TimingPanel(QFrame):
             self.winner_lbl.setText(
                 f"🏆 AES faster\nby {diff:.2f} ms this msg"
             )
-            self.winner_lbl.setStyleSheet(f"color: {GREEN}; font-size: 11px; font-weight: 700;")
+            self.winner_lbl.setStyleSheet(f"color: {GREEN}; font-size: 14px; font-weight: 700;")
         else:
             diff = aes_total - ecc_total
             self.winner_lbl.setText(
                 f"🏆 ECC faster\nby {diff:.2f} ms this msg"
             )
-            self.winner_lbl.setStyleSheet(f"color: {ORANGE}; font-size: 11px; font-weight: 700;")
+            self.winner_lbl.setStyleSheet(f"color: {ORANGE}; font-size: 14px; font-weight: 700;")
 
         # Averages
         self.msg_count_lbl.setText(f"Messages: {self._msg_count}")
@@ -316,9 +318,9 @@ class MessageBubble(QFrame):
                 padding: 2px;
             """)
             bubble_layout = QVBoxLayout(bubble)
-            bubble_layout.setContentsMargins(12, 8, 12, 8)
+            bubble_layout.setContentsMargins(14, 10, 14, 10)
             lbl = QLabel(f"⚙  {text}")
-            lbl.setStyleSheet(f"color: {TEXT_DIM}; font-size: 11px; font-style: italic;")
+            lbl.setStyleSheet(f"color: {TEXT_DIM}; font-size: 13px; font-style: italic;")
             lbl.setWordWrap(True)
             bubble_layout.addWidget(lbl)
             outer.addStretch()
@@ -329,12 +331,20 @@ class MessageBubble(QFrame):
         bg = BUBBLE_OUT if is_self else BUBBLE_IN
         border_col = ACCENT if is_self else ACCENT2
 
-        bubble.setStyleSheet(f"""
-            background: {bg};
-            border: 1px solid {border_col}40;
-            border-radius: 12px;
-            border-{'bottom-right' if is_self else 'bottom-left'}-radius: 2px;
-        """)
+        if is_self:
+            bubble.setStyleSheet(f"""
+                background: {bg};
+                border: 1px solid {border_col}40;
+                border-radius: 12px;
+                border-bottom-right-radius: 2px;
+            """)
+        else:
+            bubble.setStyleSheet(f"""
+                background: {bg};
+                border: 1px solid {border_col}40;
+                border-radius: 12px;
+                border-bottom-left-radius: 2px;
+            """)
         bubble_layout = QVBoxLayout(bubble)
         bubble_layout.setContentsMargins(14, 10, 14, 10)
         bubble_layout.setSpacing(4)
@@ -342,25 +352,37 @@ class MessageBubble(QFrame):
         # Sender name
         if not is_self:
             name_lbl = QLabel(sender)
-            name_lbl.setStyleSheet(f"color: {ACCENT2}; font-size: 10px; font-weight: 700; letter-spacing: 1px;")
+            name_lbl.setStyleSheet(f"color: {ACCENT2}; font-size: 15px; font-weight: 700; letter-spacing: 1px;")
+            name_lbl.setMinimumWidth(200)
             bubble_layout.addWidget(name_lbl)
 
         # Message text
-        msg_lbl = QLabel(text)
-        msg_lbl.setStyleSheet(f"color: {TEXT_MAIN}; font-size: 13px; line-height: 1.5;")
+        msg_lbl = QLabel()
+        msg_lbl.setText(text if text else "(empty)")
+        msg_lbl.setStyleSheet(f"color: {TEXT_MAIN}; font-size: 17px; padding: 2px;")
         msg_lbl.setWordWrap(True)
-        msg_lbl.setMaximumWidth(400)
+        msg_lbl.setMinimumWidth(200)
+        msg_lbl.setMinimumHeight(24)
+        msg_lbl.setMaximumWidth(600)
+        msg_lbl.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        msg_lbl.setTextInteractionFlags(Qt.TextSelectableByMouse)
         bubble_layout.addWidget(msg_lbl)
 
-        # Timing info
+        # Timing info — two separate lines for clarity
         if timing:
-            timing_text = (
-                f"AES  enc {timing['aes_enc']:.2f}ms · dec {timing['aes_dec']:.2f}ms   "
-                f"ECC  enc {timing['ecc_enc']:.2f}ms · dec {timing['ecc_dec']:.2f}ms"
+            aes_lbl = QLabel(
+                f"🔒 AES   enc {timing['aes_enc']:.2f}ms  ·  dec {timing['aes_dec']:.2f}ms"
             )
-            t_lbl = QLabel(timing_text)
-            t_lbl.setStyleSheet(f"color: {TEXT_DIM}; font-size: 9px; font-family: 'Courier New';")
-            bubble_layout.addWidget(t_lbl)
+            aes_lbl.setStyleSheet(f"color: {GREEN}; font-size: 13px; font-family: 'Courier New';")
+            aes_lbl.setMinimumWidth(200)
+            bubble_layout.addWidget(aes_lbl)
+
+            ecc_lbl = QLabel(
+                f"🔑 ECC   enc {timing['ecc_enc']:.2f}ms  ·  dec {timing['ecc_dec']:.2f}ms"
+            )
+            ecc_lbl.setStyleSheet(f"color: {ORANGE}; font-size: 13px; font-family: 'Courier New';")
+            ecc_lbl.setMinimumWidth(200)
+            bubble_layout.addWidget(ecc_lbl)
 
         if is_self:
             outer.addStretch()
@@ -377,7 +399,7 @@ class MessageBubble(QFrame):
 class UsersPanel(QFrame):
     def __init__(self):
         super().__init__()
-        self.setFixedWidth(160)
+        self.setFixedWidth(220)
         self.setStyleSheet(f"""
             QFrame {{
                 background: {BG_PANEL};
@@ -386,11 +408,11 @@ class UsersPanel(QFrame):
             }}
         """)
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 14, 12, 14)
-        layout.setSpacing(8)
+        layout.setContentsMargins(16, 18, 16, 18)
+        layout.setSpacing(12)
 
         hdr = QLabel("ONLINE")
-        hdr.setStyleSheet(f"color: {GREEN}; font-size: 10px; font-weight: 700; letter-spacing: 2px;")
+        hdr.setStyleSheet(f"color: {GREEN}; font-size: 15px; font-weight: 700; letter-spacing: 2px;")
         layout.addWidget(hdr)
 
         sep = QFrame()
@@ -404,18 +426,28 @@ class UsersPanel(QFrame):
         layout.addStretch()
 
     def update_users(self, users: list):
-        # Clear
-        while self.users_layout.count():
-            item = self.users_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
-        # Rebuild
+        # Properly clear all items including nested layouts
+        def clear_layout(layout):
+            while layout.count():
+                item = layout.takeAt(0)
+                if item.widget():
+                    item.widget().deleteLater()
+                elif item.layout():
+                    clear_layout(item.layout())
+
+        clear_layout(self.users_layout)
+
+        # Rebuild with deduplicated users
+        seen = set()
         for u in users:
+            if u in seen:
+                continue
+            seen.add(u)
             row = QHBoxLayout()
             dot = QLabel("●")
-            dot.setStyleSheet(f"color: {GREEN}; font-size: 8px;")
+            dot.setStyleSheet(f"color: {GREEN}; font-size: 10px;")
             name = QLabel(u)
-            name.setStyleSheet(f"color: {TEXT_MAIN}; font-size: 12px;")
+            name.setStyleSheet(f"color: {TEXT_MAIN}; font-size: 16px;")
             row.addWidget(dot)
             row.addWidget(name)
             row.addStretch()
@@ -427,8 +459,8 @@ class UsersPanel(QFrame):
 # ─────────────────────────────────────────────
 
 class ChatWindow(QMainWindow):
-    # Signals to safely update UI from network thread
-    sig_message    = pyqtSignal(str, str, dict, bool)
+    # Use a simple signal with no text — text is passed via thread-safe queue
+    sig_message    = pyqtSignal()
     sig_system     = pyqtSignal(str)
     sig_user_list  = pyqtSignal(list)
     sig_connected  = pyqtSignal()
@@ -438,6 +470,8 @@ class ChatWindow(QMainWindow):
     def __init__(self, username: str):
         super().__init__()
         self.username = username
+        self._username_taken = False
+        self._msg_queue = queue.Queue()  # Thread-safe message queue
         self.client = ChatClient(username)
         self._setup_client_callbacks()
         self._build_ui()
@@ -450,7 +484,14 @@ class ChatWindow(QMainWindow):
 
     def _setup_client_callbacks(self):
         def on_message(sender, plaintext, timing):
-            self.sig_message.emit(sender, plaintext, timing, False)
+            # Put message data in thread-safe queue
+            self._msg_queue.put({
+                'sender': sender,
+                'text': plaintext,
+                'timing': timing
+            })
+            # Signal the UI thread to process the queue
+            self.sig_message.emit()
 
         def on_system(msg):
             self.sig_system.emit(msg)
@@ -486,9 +527,16 @@ class ChatWindow(QMainWindow):
         self.sig_disconnected.connect(self._on_disconnected)
         self.sig_error.connect(self._on_error)
 
-    def _on_message(self, sender, plaintext, timing, is_self):
-        self._add_bubble(sender, plaintext, timing, is_self=False)
-        self.timing_panel.update_timing(timing)
+    def _on_message(self):
+        # Process all pending messages from queue
+        while not self._msg_queue.empty():
+            msg = self._msg_queue.get()
+            sender  = msg['sender']
+            text    = msg['text']
+            timing  = msg['timing']
+            print(f"[GUI] Message from {sender}: '{text}'")
+            self._add_bubble(sender, text, timing, is_self=False)
+            self.timing_panel.update_timing(timing)
 
     def _on_system(self, msg):
         self._add_bubble("", msg, None, is_system=True)
@@ -497,21 +545,33 @@ class ChatWindow(QMainWindow):
         self.users_panel.update_users(users)
 
     def _on_connected(self):
-        self.status_dot.setStyleSheet(f"color: {GREEN}; font-size: 10px;")
+        self.status_dot.setStyleSheet(f"color: {GREEN}; font-size: 15px;")
         self.status_lbl.setText("CONNECTED")
-        self.status_lbl.setStyleSheet(f"color: {GREEN}; font-size: 10px; letter-spacing: 1px;")
+        self.status_lbl.setStyleSheet(f"color: {GREEN}; font-size: 15px; letter-spacing: 1px;")
         self.input_field.setEnabled(True)
         self.send_btn.setEnabled(True)
 
     def _on_disconnected(self):
-        self.status_dot.setStyleSheet(f"color: {RED_COL}; font-size: 10px;")
+        self.status_dot.setStyleSheet(f"color: {RED_COL}; font-size: 15px;")
         self.status_lbl.setText("DISCONNECTED")
-        self.status_lbl.setStyleSheet(f"color: {RED_COL}; font-size: 10px; letter-spacing: 1px;")
+        self.status_lbl.setStyleSheet(f"color: {RED_COL}; font-size: 15px; letter-spacing: 1px;")
         self.input_field.setEnabled(False)
         self.send_btn.setEnabled(False)
 
     def _on_error(self, err):
-        self._add_bubble("", f"Error: {err}", None, is_system=True)
+        if 'already taken' in err:
+            from PyQt5.QtWidgets import QMessageBox
+            self._username_taken = True
+            msg = QMessageBox()
+            msg.setWindowTitle("Username Taken")
+            msg.setText(err)
+            msg.setIcon(QMessageBox.Warning)
+            msg.setStyleSheet(f"background-color: {BG_DARK}; color: {TEXT_MAIN};")
+            msg.exec_()
+            self.client.disconnect()
+            self.close()
+        else:
+            self._add_bubble("", f"Error: {err}", None, is_system=True)
 
     # ─────────────────────────────────────────
     # BUILD UI
@@ -519,7 +579,8 @@ class ChatWindow(QMainWindow):
 
     def _build_ui(self):
         self.setWindowTitle(f"Encrypted Chat — {self.username}")
-        self.setMinimumSize(1000, 680)
+        self.setMinimumSize(1100, 700)
+        self.resize(1280, 820)
         self.setStyleSheet(f"background-color: {BG_DARK};")
 
         central = QWidget()
@@ -530,18 +591,18 @@ class ChatWindow(QMainWindow):
 
         # ── Top bar ──
         topbar = QFrame()
-        topbar.setFixedHeight(54)
+        topbar.setFixedHeight(72)
         topbar.setStyleSheet(f"""
             background: {BG_MID};
             border-bottom: 1px solid {BORDER};
         """)
         tb_layout = QHBoxLayout(topbar)
-        tb_layout.setContentsMargins(20, 0, 20, 0)
+        tb_layout.setContentsMargins(28, 0, 28, 0)
 
         logo = QLabel("⬡ ENCRYPTED CHAT")
         logo.setStyleSheet(f"""
             color: {ACCENT};
-            font-size: 16px;
+            font-size: 24px;
             font-weight: 800;
             letter-spacing: 3px;
             font-family: 'Courier New', monospace;
@@ -550,12 +611,12 @@ class ChatWindow(QMainWindow):
         tb_layout.addStretch()
 
         self.status_dot = QLabel("●")
-        self.status_dot.setStyleSheet(f"color: {ORANGE}; font-size: 10px;")
+        self.status_dot.setStyleSheet(f"color: {ORANGE}; font-size: 15px;")
         self.status_lbl = QLabel("CONNECTING...")
-        self.status_lbl.setStyleSheet(f"color: {ORANGE}; font-size: 10px; letter-spacing: 1px;")
+        self.status_lbl.setStyleSheet(f"color: {ORANGE}; font-size: 15px; letter-spacing: 1px;")
 
         user_lbl = QLabel(f"  {self.username}")
-        user_lbl.setStyleSheet(f"color: {TEXT_DIM}; font-size: 11px;")
+        user_lbl.setStyleSheet(f"color: {TEXT_DIM}; font-size: 16px;")
 
         tb_layout.addWidget(self.status_dot)
         tb_layout.addWidget(self.status_lbl)
@@ -612,15 +673,15 @@ class ChatWindow(QMainWindow):
         self.input_field = QLineEdit()
         self.input_field.setPlaceholderText("Type a message and press Enter...")
         self.input_field.setEnabled(False)
-        self.input_field.setFixedHeight(46)
+        self.input_field.setFixedHeight(60)
         self.input_field.setStyleSheet(f"""
             QLineEdit {{
                 background: {BG_INPUT};
                 border: 1px solid {BORDER};
                 border-radius: 8px;
                 color: {TEXT_MAIN};
-                padding: 0 16px;
-                font-size: 13px;
+                padding: 0 18px;
+                font-size: 17px;
             }}
             QLineEdit:focus {{
                 border: 1px solid {ACCENT};
@@ -633,7 +694,7 @@ class ChatWindow(QMainWindow):
 
         self.send_btn = QPushButton("SEND  ⬆")
         self.send_btn.setEnabled(False)
-        self.send_btn.setFixedSize(110, 46)
+        self.send_btn.setFixedSize(150, 60)
         self.send_btn.setCursor(Qt.PointingHandCursor)
         self.send_btn.setStyleSheet(f"""
             QPushButton {{
@@ -642,7 +703,7 @@ class ChatWindow(QMainWindow):
                 color: white;
                 border: none;
                 border-radius: 8px;
-                font-size: 12px;
+                font-size: 14px;
                 font-weight: 700;
                 letter-spacing: 1px;
             }}
@@ -725,7 +786,6 @@ def launch_gui():
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
 
-    # Dark palette
     palette = QPalette()
     palette.setColor(QPalette.Window, QColor(BG_DARK))
     palette.setColor(QPalette.WindowText, QColor(TEXT_MAIN))
@@ -736,7 +796,6 @@ def launch_gui():
     palette.setColor(QPalette.ButtonText, QColor(TEXT_MAIN))
     app.setPalette(palette)
 
-    # Login dialog
     login = LoginDialog()
     if login.exec_() != QDialog.Accepted:
         sys.exit(0)

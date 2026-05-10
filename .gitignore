@@ -1,0 +1,17 @@
+# Virtual Environment
+venv/
+
+# Python Cache (ALL folders)
+__pycache__/
+*.pyc
+*.pyo
+
+# Database (contains private keys!)
+*.db
+chat_keys.db
+
+# VS Code
+.vscode/
+
+# Environment variables
+.env
